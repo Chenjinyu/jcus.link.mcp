@@ -1,0 +1,50 @@
+[project]
+name = "jcus-link-mcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Jinyu C", email = "jc@jcus.link" },
+]
+dependencies = [
+    "fastmcp>=2.14.0",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.2.1",
+    "starlette>=0.50.0",
+    "uvicorn>=0.38.0",
+]
+
+[dependency-groups]
+dev = [
+    "black>=25.12.0",
+    "flake8>=7.3.0",
+    "isort>=7.0.0",
+    "pyright>=1.1.407",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["src"]
