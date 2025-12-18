@@ -1,0 +1,54 @@
+# Development dependencies for MCP Resume Server
+
+# First, install production dependencies
+-r requirements.txt
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-watch==4.2.0
+pytest-benchmark==4.0.0
+coverage[toml]==7.3.2
+
+# Code Quality - Linting
+flake8==6.1.0
+flake8-docstrings==1.7.0
+flake8-bugbear==23.12.2
+flake8-comprehensions==3.14.0
+flake8-simplify==0.21.0
+pylint==3.0.3
+
+# Code Quality - Type Checking
+mypy==1.7.1
+types-requests==2.31.0.10
+
+# Code Formatting
+black==23.12.1
+isort==5.13.2
+
+# Security
+bandit==1.7.5
+safety==2.3.5
+pip-audit==2.6.1
+
+# Documentation
+mkdocs==1.5.3
+mkdocs-material==9.5.3
+mkdocstrings[python]==0.24.0
+
+# Debugging
+ipdb==0.13.13
+ipython==8.18.1
+
+# Utilities
+pipdeptree==2.13.1
+python-dotenv==1.0.0
+
+# Performance
+memory-profiler==0.61.0
+py-spy==0.3.14
+
+# Pre-commit hooks (optional)
+pre-commit==3.6.0

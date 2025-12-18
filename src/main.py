@@ -1,290 +1,194 @@
-"""MCP protocol handlers for resume matching server."""
+# src/main.py
+"""
+Main application entry point
+"""
 
 import json
 import logging
-from typing import Dict, List, Any
+from contextlib import asynccontextmanager
 
-from src.models.mcp_models import Tool, MCPResponse
-from src.database.vector_database import VectorDatabase
-from src.services.resume_generator import LLMService
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
+from .config import settings
+from .core import MCPRequest
+from .handlers import get_mcp_handler, get_http_handler
+from .models import SearchMatchesRequest, AnalyzeJobRequest, GenerateResumeRequest
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, settings.log_level),
+    format=settings.log_format
+)
 logger = logging.getLogger(__name__)
 
-# Global service instances (will be injected via dependency injection in production)
-vector_db: VectorDatabase | None = None
-llm_service: LLMService | None = None
 
-
-def initialize_services(vdb: VectorDatabase, llm: LLMService) -> None:
-    """Initialize global service instances."""
-    global vector_db, llm_service
-    vector_db = vdb
-    llm_service = llm
-
-# ============================================================================
-# MCP TOOLS DEFINITION
-# ============================================================================
-
-TOOLS = [
-    Tool(
-        name="search_matching_resumes",
-        description="Search for resumes that match a job description using vector similarity",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "job_description": {
-                    "type": "string",
-                    "description": "The job description to match against"
-                },
-                "top_k": {
-                    "type": "integer",
-                    "description": "Number of top matches to return",
-                    "default": 5
-                }
-            },
-            "required": ["job_description"]
-        }
-    ),
-    Tool(
-        name="generate_resume",
-        description="Generate an optimized resume based on job description and matched profiles",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "job_description": {
-                    "type": "string",
-                    "description": "The job description to tailor the resume for"
-                },
-                "matched_resumes": {
-                    "type": "array",
-                    "description": "List of matched resume profiles",
-                    "items": {"type": "object"}
-                },
-                "stream": {
-                    "type": "boolean",
-                    "description": "Whether to stream the response",
-                    "default": True
-                }
-            },
-            "required": ["job_description", "matched_resumes"]
-        }
-    ),
-    Tool(
-        name="analyze_job_description",
-        description="Extract key requirements and skills from a job description",
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "job_description": {
-                    "type": "string",
-                    "description": "The job description to analyze"
-                }
-            },
-            "required": ["job_description"]
-        }
-    )
-]
-
-# ============================================================================
-# MCP PROTOCOL HANDLERS
-# ============================================================================
-
-async def handle_tools_list(request_id: int) -> MCPResponse:
-    """Handle tools/list request"""
-    return MCPResponse(
-        id=request_id,
-        result={
-            "tools": [tool.dict() for tool in TOOLS]
-        }
-    )
-
-async def handle_tool_call(request_id: int, tool_name: str, arguments: Dict[str, Any]) -> MCPResponse:
-    """Handle tools/call request."""
-    if vector_db is None or llm_service is None:
-        return MCPResponse(
-            id=request_id,
-            error={
-                "code": -32603,
-                "message": "Services not initialized"
-            }
-        )
-
-    try:
-        if tool_name == "search_matching_resumes":
-            job_description = arguments.get("job_description")
-            if not job_description:
-                return MCPResponse(
-                    id=request_id,
-                    error={
-                        "code": -32602,
-                        "message": "Missing required parameter: job_description"
-                    }
-                )
-
-            top_k = arguments.get("top_k", 5)
-            
-            # Generate embedding for job description
-            query_embedding = await vector_db.embed_text(job_description)
-            
-            # Search for similar resumes
-            matches = await vector_db.similarity_search(query_embedding, top_k)
-            
-            return MCPResponse(
-                id=request_id,
-                result={
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": json.dumps({
-                                "matches": matches,
-                                "total_found": len(matches)
-                            }, indent=2)
-                        }
-                    ]
-                }
-            )
-        
-        elif tool_name == "generate_resume":
-            job_description = arguments.get("job_description")
-            matched_resumes = arguments.get("matched_resumes", [])
-            
-            if not job_description:
-                return MCPResponse(
-                    id=request_id,
-                    error={
-                        "code": -32602,
-                        "message": "Missing required parameter: job_description"
-                    }
-                )
-
-            if not matched_resumes:
-                return MCPResponse(
-                    id=request_id,
-                    error={
-                        "code": -32602,
-                        "message": "Missing required parameter: matched_resumes"
-                    }
-                )
-
-            stream = arguments.get("stream", False)
-            
-            if stream:
-                # For streaming, we'll return a special marker
-                # Actual streaming happens via SSE endpoint
-                return MCPResponse(
-                    id=request_id,
-                    result={
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "STREAM_RESPONSE:Use /generate-resume-stream endpoint"
-                            }
-                        ]
-                    }
-                )
-            else:
-                # Non-streaming response
-                resume_parts = []
-                async for chunk in llm_service.generate_resume(
-                    job_description, 
-                    matched_resumes, 
-                    stream=False
-                ):
-                    resume_parts.append(chunk)
-                
-                return MCPResponse(
-                    id=request_id,
-                    result={
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "".join(resume_parts)
-                            }
-                        ]
-                    }
-                )
-        
-        elif tool_name == "analyze_job_description":
-            job_description = arguments.get("job_description")
-            
-            if not job_description:
-                return MCPResponse(
-                    id=request_id,
-                    error={
-                        "code": -32602,
-                        "message": "Missing required parameter: job_description"
-                    }
-                )
-
-            # Use LLM service to analyze job description
-            try:
-                analysis = await llm_service.analyze_job_description(job_description)
-                
-                return MCPResponse(
-                    id=request_id,
-                    result={
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": json.dumps(analysis, indent=2)
-                            }
-                        ]
-                    }
-                )
-            except Exception as e:
-                logger.error(f"Error analyzing job description: {e}")
-                # Fallback to simple analysis
-                analysis = {
-                    "required_skills": [],
-                    "experience_level": "Unknown",
-                    "key_responsibilities": [],
-                    "estimated_match_threshold": 0.5,
-                    "error": "LLM analysis failed, using fallback"
-                }
-                
-                return MCPResponse(
-                    id=request_id,
-                    result={
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": json.dumps(analysis, indent=2)
-                            }
-                        ]
-                    }
-                )
-        
-        else:
-            return MCPResponse(
-                id=request_id,
-                error={
-                    "code": -32601,
-                    "message": f"Tool not found: {tool_name}"
-                }
-            )
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events"""
+    # Startup
+    logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+    logger.info(f"MCP Protocol Version: {settings.mcp_protocol_version}")
+    logger.info(f"LLM Provider: {settings.llm_provider}")
+    logger.info(f"Vector DB: {settings.vector_db_type}")
     
-    except Exception as e:
-        logger.exception(f"Error executing tool {tool_name}: {e}")
-        return MCPResponse(
-            id=request_id,
-            error={
-                "code": -32603,
-                "message": f"Tool execution error: {str(e)}"
-            }
-        )
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down application")
 
-async def handle_initialize(request_id: int) -> MCPResponse:
-    """Handle initialize request"""
-    return MCPResponse(
-        id=request_id,
-        result={
-            "protocolVersion": "2024-11-05",
-            "capabilities": {
-                "tools": {}
-            },
-            "serverInfo": {
-                "name": "resume-matching-server",
-                "version": "1.0.0"
-            }
+
+# Create FastAPI app
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=settings.cors_allow_methods,
+    allow_headers=settings.cors_allow_headers,
+)
+
+# Initialize handlers
+mcp_handler = get_mcp_handler()
+http_handler = get_http_handler()
+
+
+# ============================================================================
+# MCP PROTOCOL ENDPOINTS
+# ============================================================================
+
+@app.post("/mcp/message")
+async def handle_mcp_message(request: MCPRequest):
+    """Handle MCP protocol messages"""
+    response = await mcp_handler.handle_message(request)
+    return response
+
+
+# ============================================================================
+# HTTP REST ENDPOINTS
+# ============================================================================
+
+@app.post("/upload-job-description")
+async def upload_job_description(file: UploadFile = File(...)):
+    """Upload job description file and get matching resumes"""
+    try:
+        result = await http_handler.handle_file_upload(file)
+        return result
+    except Exception as e:
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/search-matches")
+async def search_matches(request: SearchMatchesRequest):
+    """Search for matching resumes"""
+    try:
+        return await http_handler.handle_search_matches(request)
+    except Exception as e:
+        logger.error(f"Search failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analyze-job")
+async def analyze_job(request: AnalyzeJobRequest):
+    """Analyze job description"""
+    try:
+        return await http_handler.handle_analyze_job(request)
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate-resume")
+async def generate_resume(request: GenerateResumeRequest):
+    """Generate optimized resume (non-streaming)"""
+    try:
+        return await http_handler.handle_generate_resume(request)
+    except Exception as e:
+        logger.error(f"Generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/generate-resume-stream")
+async def generate_resume_stream(request: GenerateResumeRequest):
+    """Generate resume with streaming"""
+    
+    async def event_stream():
+        try:
+            async for chunk in http_handler.stream_resume_generation(
+                request.job_description,
+                request.matched_resumes
+            ):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        
+        except Exception as e:
+            logger.error(f"Streaming generation failed: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
         }
+    )
+
+
+# ============================================================================
+# UTILITY ENDPOINTS
+# ============================================================================
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "name": settings.app_name,
+        "version": settings.app_version,
+        "protocol": settings.mcp_protocol_version,
+        "endpoints": {
+            "mcp": "/mcp/message",
+            "upload": "/upload-job-description",
+            "search": "/search-matches",
+            "analyze": "/analyze-job",
+            "generate": "/generate-resume",
+            "stream": "/generate-resume-stream",
+            "health": "/health"
+        }
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "server": settings.app_name,
+        "version": settings.app_version,
+        "protocol": settings.mcp_protocol_version
+    }
+
+
+# ============================================================================
+# RUN SERVER
+# ============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    uvicorn.run(
+        "main:app",
+        host=settings.host,
+        port=settings.port,
+        reload=settings.debug,
+        log_level=settings.log_level.lower()
     )
