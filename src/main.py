@@ -11,10 +11,10 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from .config import settings
-from .core import MCPRequest
-from .handlers import get_mcp_handler, get_http_handler
-from .models import SearchMatchesRequest, AnalyzeJobRequest, GenerateResumeRequest
+from src.config import settings
+from src.core import MCPRequest
+from src.handlers import get_mcp_handler, get_http_handler
+from src.models import SearchMatchesRequest, AnalyzeJobRequest, GenerateResumeRequest
 
 # Configure logging
 logging.basicConfig(

@@ -23,12 +23,6 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-[project.urls]
-Homepage = "https://github.com/Chenjinyu/jcus.link.mcp"
-Documentation = "https://github.com/Chenjinyu/jcus.link.mcp/blob/master/README.md"
-Repository = "https://github.com/Chenjinyu/jcus.link.mcp"
-
-
 dependencies = [
     "fastapi>=0.125.0",
     "fastmcp>=2.14.0",
@@ -48,6 +42,16 @@ dependencies = [
     # "chromadb>=0.5.0",
     # "sentence-transformers>=3.0.0",
 ]
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[project.urls]
+Homepage = "https://github.com/Chenjinyu/jcus.link.mcp"
+Documentation = "https://github.com/Chenjinyu/jcus.link.mcp/blob/master/README.md"
+Repository = "https://github.com/Chenjinyu/jcus.link.mcp"
 
 [dependency-groups]
 dev = [
