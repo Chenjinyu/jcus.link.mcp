@@ -8,11 +8,23 @@ authors = [
     { name = "Jinyu C", email = "jc@jcus.link" },
 ]
 dependencies = [
+    "fastapi>=0.125.0",
     "fastmcp>=2.14.0",
+    "numpy>=2.3.5",
     "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
     "starlette>=0.50.0",
     "uvicorn>=0.38.0",
+    # Document parsing
+    "pypdf>=6.4.1",
+    "python-docx>=1.2.0",
+    "beautifulsoup4>=4.12.2",
+    "lxml>=6.0.0",
+    # LLM integration (add your preferred provider)
+    "anthropic>=0.68.0",
+    # Optional: vector database (uncomment when ready)
+    # "chromadb>=0.5.0",
+    # "sentence-transformers>=3.0.0",
 ]
 
 [dependency-groups]
