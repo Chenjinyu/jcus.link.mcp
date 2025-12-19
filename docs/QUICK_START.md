@@ -5,7 +5,7 @@
 ### Step 1: Install Dependencies
 
 ```bash
-cd /Users/jinyuchen/ForFamilyPrjs/jcus.link.mcp
+cd ~/jcus.link.mcp
 uv sync
 ```
 

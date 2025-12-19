@@ -1,6 +1,13 @@
 # src/config/settings.py
 """
-Application configuration and settings
+Application configuration and settings.
+BaseSettings automatically reads from (non-case-sensitive by default.)
+1. OS environment variables (os.environ)
+2. .env file (if env_file is configured)
+3. Default values in code
+as the order. 
+AS LONG AS THE ENV EXISTS IN OS ENV, IT WILL BE USED, AND CANNOT
+OVERWRITE BY THE .ENV FILE.
 """
 
 from pydantic_settings import BaseSettings
