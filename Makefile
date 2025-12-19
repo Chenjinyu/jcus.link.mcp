@@ -126,6 +126,10 @@ run: ## Run development server
 	@echo "Starting development server..."
 	@$(PYTHON) -m src.main
 
+run-fastmcp: ## Run FastMCP server (recommended)
+	@echo "Starting FastMCP server..."
+	@$(PYTHON) -m src.main_fastmcp
+
 run-reload: ## Run development server with auto-reload
 	@echo "Starting development server with auto-reload..."
 	@uvicorn src.main:app --reload --host 0.0.0.0 --port 8000

@@ -1,6 +1,6 @@
-# src/core/mcp_protocol.py
+# src/models/mcp_schema.py
 """
-MCP Protocol models and types
+MCP Protocol models and types (Pydantic models)
 """
 
 from pydantic import BaseModel, Field
@@ -49,7 +49,7 @@ class MCPResponse(BaseModel):
     error: Optional[MCPError] = None
 
 
-class ToolInputSchema(BaseModel):
+class ToolInput(BaseModel):
     """JSON Schema for tool input"""
     type: str = "object"
     properties: Dict[str, Any] = Field(default_factory=dict)
@@ -60,7 +60,7 @@ class Tool(BaseModel):
     """MCP Tool definition"""
     name: str
     description: str
-    inputSchema: ToolInputSchema
+    inputSchema: ToolInput
 
 
 class TextContent(BaseModel):
@@ -111,3 +111,4 @@ class ToolCallParams(BaseModel):
     """tools/call parameters"""
     name: str
     arguments: Dict[str, Any] = Field(default_factory=dict)
+

@@ -5,12 +5,12 @@ LLM Service for resume generation and text processing
 
 import asyncio
 import logging
-from typing import AsyncIterator, List, Optional
+from typing import AsyncIterator, List, Optional, AsyncGenerator
 from abc import ABC, abstractmethod
 
 from ..config import settings
 from ..core.exceptions import LLMServiceException
-from ..models import ResumeMatch
+from ..schemas import ResumeMatch
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class BaseLLMService(ABC):
         job_description: str,
         matched_resumes: List[ResumeMatch],
         stream: bool = True
-    ) -> AsyncIterator[str]:
+    ) -> AsyncGenerator[str, None]:
         """Generate resume based on job description and matches"""
         pass
     
@@ -55,7 +55,7 @@ class AnthropicLLMService(BaseLLMService):
         job_description: str,
         matched_resumes: List[ResumeMatch],
         stream: bool = True
-    ) -> AsyncIterator[str]:
+    ) -> AsyncGenerator[str, None]:
         """Generate optimized resume using Claude"""
         
         try:
@@ -214,7 +214,7 @@ class OpenAILLMService(BaseLLMService):
         job_description: str,
         matched_resumes: List[ResumeMatch],
         stream: bool = True
-    ) -> AsyncIterator[str]:
+    ) -> AsyncGenerator[str, None]:
         """Generate resume using OpenAI"""
         # Implementation similar to Anthropic
         yield "OpenAI implementation"

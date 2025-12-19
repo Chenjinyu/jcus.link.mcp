@@ -1,6 +1,6 @@
-# src/models/domain_models.py
+# src/models/domain_schema.py
 """
-Domain-specific data models
+Domain-specific data schema with Pydantic models
 """
 
 from pydantic import BaseModel, Field

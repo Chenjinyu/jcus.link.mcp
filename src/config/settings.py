@@ -30,11 +30,18 @@ class Settings(BaseSettings):
     # MCP Protocol
     mcp_protocol_version: str = "2024-11-05"
     
-    # Vector Database
-    vector_db_type: str = "chromadb"  # chromadb, pinecone, weaviate
-    vector_db_host: Optional[str] = None
-    vector_db_port: Optional[int] = None
-    vector_db_collection: str = "resumes"
+    # Vector Database - Primary: Supabase
+    vector_db_type: str = "supabase"  # supabase, chromadb
+    supabase_url: Optional[str] = None
+    supabase_key: Optional[str] = None
+    supabase_collection: str = "resumes"
+    
+    # Vector Database - Alternative: ChromaDB
+    chromadb_host: Optional[str] = None
+    chromadb_port: Optional[int] = None
+    chromadb_collection: str = "resumes"
+    
+    # Embeddings
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dimension: int = 384
     
@@ -58,9 +65,15 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     
-    # File Upload
+    # File Upload & Document Parsing
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
-    allowed_file_types: list[str] = [".txt", ".pdf", ".doc", ".docx"]
+    allowed_file_types: list[str] = [".txt", ".pdf", ".doc", ".docx", ".html", ".md"]
+    allow_url_uploads: bool = True  # Allow uploading job descriptions from URLs
+    allowed_url_schemes: list[str] = ["http", "https"]
+    
+    # Document parsing timeouts
+    url_fetch_timeout: int = 30  # seconds
+    pdf_max_pages: int = 100
     
     # Resume Generation
     default_top_k: int = 5

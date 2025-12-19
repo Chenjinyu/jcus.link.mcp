@@ -4,11 +4,12 @@ Resume Service - High-level business logic for resume operations
 """
 
 import logging
-from typing import List, AsyncIterator
+from typing import List, AsyncIterator, cast
+from collections.abc import AsyncGenerator
 
 from .llm_service import get_llm_service
 from .vector_service import get_vector_service
-from ..models import (
+from ..schemas import (
     ResumeMatch,
     JobAnalysis,
     SearchMatchesRequest,
@@ -85,11 +86,18 @@ class ResumeService:
         )
         
         # Use LLM to generate resume
-        async for chunk in self.llm_service.generate_resume(
-            job_description,
-            matched_resumes,
-            stream=stream
-        ):
+        # generate_resume is an async generator function (uses yield)
+        # When called, it returns an async generator object directly, not a coroutine
+        # We need to cast to help the type checker understand this
+        resume_generator = cast(
+            AsyncGenerator[str, None],
+            self.llm_service.generate_resume(
+                job_description,
+                matched_resumes,
+                stream=stream
+            )
+        )
+        async for chunk in resume_generator:
             yield chunk
         
         logger.info("Resume generation complete")

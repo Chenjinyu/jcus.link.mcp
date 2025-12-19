@@ -8,8 +8,6 @@ from typing import AsyncGenerator
 
 from src.config import settings
 from src.services import get_llm_service, get_vector_service, get_resume_service
-from src.tools import get_tool_registry
-from src.handlers import get_mcp_handler, get_http_handler
 
 
 @pytest.fixture
@@ -37,24 +35,6 @@ def resume_service():
 
 
 @pytest.fixture
-def tool_registry():
-    """Get tool registry instance"""
-    return get_tool_registry()
-
-
-@pytest.fixture
-def mcp_handler():
-    """Get MCP handler instance"""
-    return get_mcp_handler()
-
-
-@pytest.fixture
-def http_handler():
-    """Get HTTP handler instance"""
-    return get_http_handler()
-
-
-@pytest.fixture
 def sample_job_description():
     """Sample job description for testing"""
     return """
@@ -69,7 +49,7 @@ def sample_job_description():
 @pytest.fixture
 def sample_resume_matches():
     """Sample resume matches for testing"""
-    from src.models import ResumeMatch
+    from src.schemas import ResumeMatch
     
     return [
         ResumeMatch(
@@ -92,7 +72,7 @@ def sample_resume_matches():
 @pytest.fixture
 def sample_mcp_request():
     """Sample MCP request for testing"""
-    from src.core import MCPRequest
+    from src.schemas import MCPRequest
     
     return MCPRequest(
         jsonrpc="2.0",

@@ -9,8 +9,8 @@ from .llm_service import (
 )
 from .vector_service import (
     BaseVectorService,
+    SupabaseVectorService,
     ChromaDBVectorService,
-    PineconeVectorService,
     get_vector_service,
 )
 from .resume_service import ResumeService, get_resume_service
@@ -23,8 +23,8 @@ __all__ = [
     "get_llm_service",
     # Vector Service
     "BaseVectorService",
+    "SupabaseVectorService",
     "ChromaDBVectorService",
-    "PineconeVectorService",
     "get_vector_service",
     # Resume Service
     "ResumeService",
