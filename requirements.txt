@@ -33,7 +33,7 @@ lxml==4.9.3
 markdown==3.5.1
 
 # URL handling
-requests==2.31.0
+requests==2.32.4
 validators==0.22.0
 
 # Utilities
