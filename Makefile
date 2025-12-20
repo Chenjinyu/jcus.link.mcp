@@ -1,10 +1,12 @@
 # Makefile for MCP Resume Server
 # Provides common development tasks: Formatting, Linting, Typing, Testing, Cleanup
 # stack: 
-# - Formatting: black
-# - Linting:    ruff
-# - Typing:     mypy
-# - Tests:      pytest
+# - Formatting: black - Industry standard code formatter
+# - Linting:    ruff - Fast, replaces flake8, isort, pyflakes, pylint, etc.
+# - Typing:     pyright - Fast type checker (VS Code native)
+# - Tests:      pytest - Most popular testing framework
+# - Coverage:   pytest-cov - Coverage reports for pytest
+# - Virtual Env: uv - Manage dependencies and virtual environments
 
 .PHONY: help install install-dev lint ruff ruff-fix black mypy test test-coverage clean all check run
 
@@ -40,8 +42,8 @@ install-dev: ## Install development dependencies (includes testing, linting tool
 	@echo "Installing development dependencies with uv..."
 	@uv sync
 
-##@ Code Quality
-lint: ruff mypy ## Run all linters (ruff + mypy)
+##@ Code Quality. switch mypy to pyright which is more powerful and faster
+lint: ruff pyright ## Run all linters (ruff + pyright)
 
 ruff: ## Run ruff linter
 	@echo "Running ruff..."
@@ -51,9 +53,12 @@ ruff-fix: ## Run ruff with auto-fix
 	@echo "Running ruff (auto-fix)..."
 	@ruff check $(SRC_DIR) $(TEST_DIR) --fix
 
-mypy: ## Run mypy type checker
-	@echo "Running mypy..."
-	@mypy $(SRC_DIR) --ignore-missing-imports --no-strict-optional
+pyright: ## Run mypy type checker
+	@echo "Running pyright..."
+	@pyright $(SRC_DIR)
+
+# same as make pyright
+typecheck: pyright ## Run pyright type checker
 
 black: ## Format code with black
 	@echo "Running black..."

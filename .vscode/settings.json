@@ -5,18 +5,7 @@
     "${workspaceFolder}/.venv/lib/python3.14/site-packages"
   ],
   "python.analysis.autoImportCompletions": true,
-  "python.analysis.diagnosticSeverityOverrides": {
-    // Make attribute access issues warnings (yellow) instead of errors (red)
-    "reportAttributeAccessIssue": "information",
-    "reportGeneralTypeIssues": "information",
-    
-    // Or make them informational (blue)
-    // "reportAttributeAccessIssue": "information",
-    
-    // Or disable completely
-    // "reportAttributeAccessIssue": "none",
-  },
-  "python.analysis.typeCheckingMode": "basic"
+  "python.analysis.typeCheckingMode": "off"
 }
 
 

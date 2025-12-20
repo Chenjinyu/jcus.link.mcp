@@ -33,7 +33,11 @@ from .core.exceptions import FileUploadException
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
-    format=settings.log_format
+    format=settings.log_format,
+    handlers=[
+        logging.FileHandler("app.log"),
+        logging.StreamHandler(),
+    ],
 )
 logger = logging.getLogger(__name__)
 
