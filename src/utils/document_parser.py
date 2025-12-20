@@ -11,7 +11,7 @@ from typing import Optional, Union
 from io import BytesIO
 
 # Document parsing libraries
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 from docx import Document
 from bs4 import BeautifulSoup
 import markdown

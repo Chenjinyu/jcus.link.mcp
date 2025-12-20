@@ -45,7 +45,6 @@ dependencies = [
     # "chromadb>=0.5.0",
     # "sentence-transformers>=3.0.0",
     "validators>=0.35.0",
-    "pypdf2>=3.0.1",
     "markdown>=3.10",
     "vecs>=0.4.5",
 ]
@@ -138,55 +137,9 @@ exclude_lines = [
 [tool.coverage.html]
 directory = "htmlcov"
 
-# mypy configuration
-[tool.mypy]
-python_version = "3.11"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-check_untyped_defs = true
-disallow_untyped_decorators = false
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-warn_unreachable = true
-strict_equality = true
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-ignore_errors = true
 
 # Bandit configuration (security)
 [tool.bandit]
 exclude_dirs = ["tests", "venv", ".venv"]
 skips = ["B101", "B601"]
 
-# pylint configuration
-[tool.pylint.main]
-fail-under = 8.0
-ignore = ["tests", ".venv", "venv"]
-jobs = 0
-limit-inference-results = 100
-py-version = "3.11"
-
-[tool.pylint.messages_control]
-disable = [
-    "C0111",  # missing-docstring
-    "C0103",  # invalid-name
-    "R0903",  # too-few-public-methods
-    "R0913",  # too-many-arguments
-    "W0212",  # protected-access
-]
-
-[tool.pylint.format]
-max-line-length = 100
-
-[tool.pylint.basic]
-good-names = ["i", "j", "k", "ex", "Run", "_", "id", "logger"]
-
-[tool.pylint.design]
-max-attributes = 10
-max-args = 8

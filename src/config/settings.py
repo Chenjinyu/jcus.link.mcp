@@ -10,7 +10,7 @@ AS LONG AS THE ENV EXISTS IN OS ENV, IT WILL BE USED, AND CANNOT
 OVERWRITE BY THE .ENV FILE.
 """
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 from functools import lru_cache
 
@@ -86,10 +86,11 @@ class Settings(BaseSettings):
     default_top_k: int = 5
     min_similarity_threshold: float = 0.5
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
 
 @lru_cache()

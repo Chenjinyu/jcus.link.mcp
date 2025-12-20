@@ -9,15 +9,10 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from src.main_fastmcp import mcp, settings
-import logging
+from fastmcp.utilities.logging import get_logger
 
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, settings.log_level),
-    format=settings.log_format
-)
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 if __name__ == "__main__":
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")

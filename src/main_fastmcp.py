@@ -550,9 +550,12 @@ if __name__ == "__main__":
     import uvicorn
     
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
+    logger.info(f"Server will run on http://{settings.host}:{settings.port}")
     logger.info(f"LLM Provider: {settings.llm_provider}")
     logger.info(f"Vector DB: {settings.vector_db_type}")
+    logger.info(f"MCP endpoint: http://{settings.host}:{settings.port}/mcp")
     
-    # Run FastMCP server
-    mcp.run()
+    # Run FastMCP server using StreamableHTTP transport
+    # The host and port are set during FastMCP initialization above
+    mcp.run(transport="streamable-http")
 
