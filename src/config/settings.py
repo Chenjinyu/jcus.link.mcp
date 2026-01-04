@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     vector_db_type: str = "supabase"  # supabase, chromadb
     supabase_url: Optional[str] = None
     supabase_key: Optional[str] = None
+    supabase_postgres_url: Optional[str] = None
     supabase_collection: str = "resumes"
     
     # Vector Database - Alternative: ChromaDB
@@ -51,6 +52,7 @@ class Settings(BaseSettings):
     # Embeddings
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dimension: int = 384
+    vector_search_model_name: str = "nomic-embed-text-768"
     
     # LLM Service
     llm_provider: str = "anthropic"  # anthropic, openai
@@ -62,6 +64,10 @@ class Settings(BaseSettings):
     # OpenAI (alternative)
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4"
+    google_api_key: Optional[str] = None
+
+    # Profile/Resume Data
+    author_user_id: Optional[str] = None
     
     # Rate Limiting
     rate_limit_enabled: bool = True
@@ -85,6 +91,11 @@ class Settings(BaseSettings):
     # Resume Generation
     default_top_k: int = 5
     min_similarity_threshold: float = 0.5
+
+    # Resume Cache
+    resume_cache_ttl_seconds: int = 24 * 60 * 60
+    resume_cache_max_entries: int = 200
+    resume_cache_path: str = ".cache/resume_cache.json"
     
     model_config = SettingsConfigDict(
         env_file=".env",

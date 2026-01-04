@@ -4,8 +4,9 @@ LLM Service for resume generation and text processing
 """
 
 import asyncio
+import json
 import logging
-from typing import AsyncIterator, List, Optional, AsyncGenerator
+from typing import AsyncIterator, List, Optional, AsyncGenerator, Any
 from abc import ABC, abstractmethod
 
 from ..config import settings
@@ -13,6 +14,115 @@ from ..core.exceptions import LLMServiceException
 from ..schemas import ResumeMatch
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    return [str(value)]
+
+
+def _format_date_range(entry: dict[str, Any]) -> str:
+    start = entry.get("start_date")
+    end = entry.get("end_date")
+    is_current = entry.get("is_current")
+    if start and (end or is_current):
+        return f"{start} - {end or 'Present'}"
+    if start:
+        return str(start)
+    return ""
+
+def _render_resume_from_source(resume_source: dict[str, Any]) -> str:
+    profile_data = resume_source.get("profile_data", []) or []
+    personal_attributes = resume_source.get("personal_attributes", []) or []
+
+    sections: list[str] = ["# Resume\n"]
+
+    summary_items = [
+        attr
+        for attr in personal_attributes
+        if attr.get("attribute_type") in {"summary", "bio", "headline"}
+    ]
+    if summary_items:
+        sections.append("## Professional Summary\n")
+        for item in summary_items:
+            description = item.get("description") or item.get("value")
+            if description:
+                sections.append(f"- {description}\n")
+        sections.append("\n")
+
+    skills: list[str] = []
+    for entry in profile_data:
+        if entry.get("category") == "skill":
+            data = entry.get("data") or {}
+            skills.extend(_ensure_list(data.get("skills") or data.get("name")))
+    if skills:
+        unique_skills = sorted({skill for skill in skills if skill})
+        sections.append("## Key Skills\n")
+        sections.append("- " + ", ".join(unique_skills) + "\n\n")
+
+    work_items = [entry for entry in profile_data if entry.get("category") == "work_experience"]
+    if work_items:
+        sections.append("## Work Experience\n")
+        for entry in work_items:
+            data = entry.get("data") or {}
+            title = data.get("title") or data.get("position") or data.get("role")
+            company = data.get("company") or data.get("organization")
+            header = " | ".join([part for part in [title, company] if part])
+            if header:
+                sections.append(f"### {header}\n")
+            date_range = _format_date_range(entry)
+            if date_range:
+                sections.append(f"*{date_range}*\n")
+            details: list[str] = []
+            details.extend(_ensure_list(data.get("description")))
+            details.extend(_ensure_list(data.get("responsibilities")))
+            details.extend(_ensure_list(data.get("achievements")))
+            if details:
+                for detail in details:
+                    sections.append(f"- {detail}\n")
+            sections.append("\n")
+
+    education_items = [entry for entry in profile_data if entry.get("category") == "education"]
+    if education_items:
+        sections.append("## Education\n")
+        for entry in education_items:
+            data = entry.get("data") or {}
+            degree = data.get("degree") or data.get("title")
+            institution = data.get("institution") or data.get("school")
+            line = " | ".join([part for part in [degree, institution] if part])
+            if line:
+                sections.append(f"- {line}\n")
+        sections.append("\n")
+
+    cert_items = [entry for entry in profile_data if entry.get("category") == "certification"]
+    if cert_items:
+        sections.append("## Certifications\n")
+        for entry in cert_items:
+            data = entry.get("data") or {}
+            name = data.get("name") or data.get("title")
+            issuer = data.get("issuer")
+            line = " | ".join([part for part in [name, issuer] if part])
+            if line:
+                sections.append(f"- {line}\n")
+        sections.append("\n")
+
+    project_items = [entry for entry in profile_data if entry.get("category") == "project"]
+    if project_items:
+        sections.append("## Projects\n")
+        for entry in project_items:
+            data = entry.get("data") or {}
+            title = data.get("title") or data.get("name")
+            if title:
+                sections.append(f"### {title}\n")
+            details = _ensure_list(data.get("description"))
+            for detail in details:
+                sections.append(f"- {detail}\n")
+            sections.append("\n")
+
+    return "".join(sections).rstrip() + "\n"
 
 
 class BaseLLMService(ABC):
@@ -31,6 +141,17 @@ class BaseLLMService(ABC):
     @abstractmethod
     async def analyze_text(self, text: str) -> dict:
         """Analyze text and extract structured information"""
+        pass
+
+    @abstractmethod
+    async def generate_resume_from_source(
+        self,
+        job_description: str,
+        resume_source: dict[str, Any],
+        match_summary: dict[str, Any],
+        stream: bool = True,
+    ) -> AsyncGenerator[str, None]:
+        """Generate resume using structured source data"""
         pass
 
 
@@ -95,6 +216,31 @@ class AnthropicLLMService(BaseLLMService):
         except Exception as e:
             logger.error(f"Text analysis failed: {e}")
             raise LLMServiceException("text analysis", str(e))
+
+    async def generate_resume_from_source(
+        self,
+        job_description: str,
+        resume_source: dict[str, Any],
+        match_summary: dict[str, Any],
+        stream: bool = True,
+    ) -> AsyncGenerator[str, None]:
+        try:
+            if not self.api_key:
+                yield _render_resume_from_source(resume_source)
+                return
+
+            prompt = self._build_resume_from_source_prompt(
+                job_description, resume_source, match_summary
+            )
+            if stream:
+                async for chunk in self._stream_generate(prompt):
+                    yield chunk
+            else:
+                result = await self._generate(prompt)
+                yield result
+        except Exception as e:
+            logger.error(f"Resume generation failed: {e}")
+            raise LLMServiceException("resume generation", str(e))
     
     def _build_resume_prompt(
         self,
@@ -141,6 +287,39 @@ Provide:
 4. Estimated match threshold (0.0-1.0)
 
 Format as JSON.
+"""
+
+    def _build_resume_from_source_prompt(
+        self,
+        job_description: str,
+        resume_source: dict[str, Any],
+        match_summary: dict[str, Any],
+    ) -> str:
+        resume_source_json = json.dumps(resume_source, ensure_ascii=True)
+        match_summary_json = json.dumps(match_summary, ensure_ascii=True)
+        return f"""You are updating the author's resume for a specific job description.
+
+Rules:
+- Use ONLY the facts present in Resume Source.
+- Do not invent dates, roles, companies, or skills not listed.
+- Prefer items most relevant to the job description and match summary.
+
+Job Description:
+{job_description}
+
+Match Summary:
+{match_summary_json}
+
+Resume Source (JSON):
+{resume_source_json}
+
+Return a professional resume in markdown with:
+- Professional Summary
+- Key Skills
+- Work Experience
+- Education
+- Certifications (if present)
+- Projects (if present)
 """
     
     async def _stream_generate(self, prompt: str) -> AsyncIterator[str]:
@@ -223,6 +402,18 @@ class OpenAILLMService(BaseLLMService):
         """Analyze text using OpenAI"""
         # Implementation similar to Anthropic
         return {}
+
+    async def generate_resume_from_source(
+        self,
+        job_description: str,
+        resume_source: dict[str, Any],
+        match_summary: dict[str, Any],
+        stream: bool = True,
+    ) -> AsyncGenerator[str, None]:
+        if not self.api_key:
+            yield _render_resume_from_source(resume_source)
+            return
+        yield "OpenAI implementation"
 
 
 class LLMServiceFactory:

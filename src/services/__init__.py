@@ -14,6 +14,7 @@ from .vector_service import (
     get_vector_service,
 )
 from .resume_service import ResumeService, get_resume_service
+from .profile_service import ProfileService, get_profile_service
 
 __all__ = [
     # LLM Service
@@ -29,4 +30,7 @@ __all__ = [
     # Resume Service
     "ResumeService",
     "get_resume_service",
+    # Profile Service
+    "ProfileService",
+    "get_profile_service",
 ]

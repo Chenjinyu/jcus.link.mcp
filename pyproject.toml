@@ -47,6 +47,13 @@ dependencies = [
     "validators>=0.35.0",
     "markdown>=3.10",
     "vecs>=0.4.5",
+    "asyncpg>=0.31.0",
+    "openai>=2.14.0",
+    "google-genai>=1.56.0",
+    "asyncio>=4.0.0",
+    "jq>=1.10.0",
+    "unstructured>=0.18.24",
+    "psycopg2-binary>=2.9.11",
 ]
 [project.optional-dependencies]
 dev = [

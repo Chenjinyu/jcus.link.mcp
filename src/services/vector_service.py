@@ -161,7 +161,6 @@ class SupabaseVectorService(BaseVectorService):
         top_k: int = 5
     ) -> List[ResumeMatch]:
         """Find most similar resumes using cosine similarity"""
-        
         try:
             if self.collection and self.vecs_client:
                 # Use Supabase vector search
@@ -171,7 +170,6 @@ class SupabaseVectorService(BaseVectorService):
                     filters={},
                     measure="cosine_distance"
                 )
-                
                 matches = []
                 for result in results:
                     # Parse metadata
@@ -185,21 +183,16 @@ class SupabaseVectorService(BaseVectorService):
                             similarity_score=1.0 - result['distance']  # Convert distance to similarity
                         )
                     )
-                
                 return matches
-            
             else:
                 # Fallback to simulated search
                 results = []
-                
                 for resume in self.resumes:
                     resume_embedding = np.array(resume.embedding)
-                    
                     # Calculate cosine similarity
                     similarity = np.dot(query_embedding, resume_embedding) / (
                         np.linalg.norm(query_embedding) * np.linalg.norm(resume_embedding)
                     )
-                    
                     # Filter by threshold
                     if similarity >= settings.min_similarity_threshold:
                         results.append(
@@ -211,26 +204,22 @@ class SupabaseVectorService(BaseVectorService):
                                 similarity_score=float(similarity)
                             )
                         )
-                
                 # Sort by similarity (descending)
                 results.sort(key=lambda x: x.similarity_score, reverse=True)
                 
                 logger.info(f"Found {len(results)} matches, returning top {top_k}")
                 return results[:top_k]
-        
         except Exception as e:
             logger.error(f"Similarity search failed: {e}")
             raise VectorDatabaseException("similarity search", str(e))
     
     async def add_resume(self, resume: ResumeData) -> bool:
         """Add resume to vector database"""
-        
         try:
             # Generate embedding if not provided
             if not resume.embedding:
                 embedding = await self.embed_text(resume.content)
                 resume.embedding = embedding.tolist()
-            
             if self.collection:
                 # Add to Supabase
                 self.collection.upsert(
@@ -252,16 +241,13 @@ class SupabaseVectorService(BaseVectorService):
                 # Add to simulated data
                 self.resumes.append(resume)
                 logger.info(f"Added resume to simulated data: {resume.id}")
-            
             return True
-        
         except Exception as e:
             logger.error(f"Failed to add resume: {e}")
             raise VectorDatabaseException("add resume", str(e))
     
     async def delete_resume(self, resume_id: str) -> bool:
         """Delete resume from vector database"""
-        
         try:
             if self.collection:
                 # Delete from Supabase
@@ -271,9 +257,7 @@ class SupabaseVectorService(BaseVectorService):
                 # Delete from simulated data
                 self.resumes = [r for r in self.resumes if r.id != resume_id]
                 logger.info(f"Deleted resume from simulated data: {resume_id}")
-            
             return True
-        
         except Exception as e:
             logger.error(f"Failed to delete resume: {e}")
             raise VectorDatabaseException("delete resume", str(e))
@@ -290,7 +274,6 @@ class ChromaDBVectorService(BaseVectorService):
         self.client: Optional[Any] = None
         self.collection: Optional[Any] = None
         self.embedding_model: Optional[Any] = None
-        
         try:
             import chromadb  # type: ignore
             self.client = chromadb.Client()
@@ -299,14 +282,12 @@ class ChromaDBVectorService(BaseVectorService):
                 logger.info(f"Connected to ChromaDB collection: {self.collection_name}")
         except Exception as e:
             logger.warning(f"ChromaDB initialization failed: {e}")
-        
         # Initialize embedding model
         try:
             from sentence_transformers import SentenceTransformer  # type: ignore
             self.embedding_model = SentenceTransformer(self.embedding_model_name)
         except Exception:
             pass
-        
         # Simulated data
         self._init_sample_data()
     
@@ -322,7 +303,6 @@ class ChromaDBVectorService(BaseVectorService):
                 embedding=np.random.rand(settings.embedding_dimension).tolist()
             ),
         ]
-    
     async def embed_text(self, text: str) -> np.ndarray:
         """Generate embedding for text"""
         if self.embedding_model:

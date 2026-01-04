@@ -158,6 +158,8 @@ async def upload_job_description(
 async def search_matching_resumes(
     job_description: str,
     top_k: int = 5,
+    user_id: Optional[str] = None,
+    include_summary: bool = True,
     ctx: Optional[Context] = None
 ) -> str:
     """
@@ -166,6 +168,8 @@ async def search_matching_resumes(
     Args:
         job_description: The job description text to match against
         top_k: Number of top matches to return (1-20, default: 5)
+        user_id: Supabase user ID (defaults to configured author_user_id)
+        include_summary: Include match summary and match rate
         ctx: FastMCP context for logging (automatically injected)
     
     Returns:
@@ -184,16 +188,24 @@ async def search_matching_resumes(
         else:
             logger.info(f"Searching for top {top_k} matching resumes")
         
-        # Create search request
         request = SearchMatchesRequest(
             job_description=job_description,
             top_k=top_k
         )
         
-        # Execute search
         if ctx:
-            await ctx.debug("Generating embeddings and performing similarity search...")
-        result = await resume_service.search_matching_resumes(request)
+            await ctx.debug("Searching for matching resume data...")
+        result = await resume_service.search_matching_resumes(
+            request,
+            user_id=user_id
+        )
+
+        match_summary = None
+        if include_summary:
+            match_summary = await resume_service.summarize_matches(
+                job_description,
+                result.matches
+            )
         
         # Store matches for later reference
         job_id = f"search_{datetime.now().isoformat()}"
@@ -208,7 +220,8 @@ async def search_matching_resumes(
             "status": "success",
             "job_id": job_id,
             "matches": [match.dict() for match in result.matches],
-            "total_found": result.total_found
+            "total_found": result.total_found,
+            "match_summary": match_summary.to_dict() if match_summary else None
         }, indent=2, default=str)
     
     except Exception as e:
@@ -321,7 +334,10 @@ async def analyze_job_description(
 @mcp.tool()
 async def generate_resume(
     job_description: str,
-    matched_resumes: List[dict],
+    top_k: int = 5,
+    user_id: Optional[str] = None,
+    use_cache: bool = True,
+    matched_resumes: Optional[List[dict]] = None,
     stream: bool = False,
     ctx: Optional[Context] = None
 ) -> str:
@@ -330,8 +346,11 @@ async def generate_resume(
     
     Args:
         job_description: The job description to tailor the resume for
-        matched_resumes: List of matched resume profiles (as dicts)
-        stream: Whether to stream the response (not supported in MCP tools, use resource instead)
+        top_k: Number of top matches to use when tailoring the resume
+        user_id: Supabase user ID (defaults to configured author_user_id)
+        use_cache: Whether to use cached resumes
+        matched_resumes: Ignored; kept for backward compatibility
+        stream: Whether to stream the response (not supported in MCP tools)
         ctx: FastMCP context for logging (automatically injected)
     
     Returns:
@@ -341,44 +360,33 @@ async def generate_resume(
         if not job_description.strip():
             raise ValueError("Job description cannot be empty")
         
-        if not matched_resumes:
-            raise ValueError("matched_resumes cannot be empty")
-        
-        # Convert dicts to ResumeMatch objects
-        resume_matches = []
-        for resume_data in matched_resumes:
-            try:
-                resume_matches.append(ResumeMatch(**resume_data))
-            except Exception as e:
-                raise ValueError(f"Invalid resume data format: {e}")
-        
         if ctx:
-            await ctx.info(f"Generating resume for {len(resume_matches)} matched profiles")
-            await ctx.debug("Building prompt and calling LLM service")
+            await ctx.info("Generating updated resume from Supabase profile data")
+            if matched_resumes:
+                await ctx.debug("Ignoring provided matched_resumes in favor of live search results")
         else:
-            logger.info(f"Generating resume for {len(resume_matches)} matched profiles")
+            logger.info("Generating updated resume from Supabase profile data")
         
-        # Generate resume (non-streaming for tool response)
-        resume_chunks = []
-        chunk_count = 0
-        async for chunk in resume_service.generate_optimized_resume(
-            job_description,
-            resume_matches,
-            stream=False
-        ):
-            resume_chunks.append(chunk)
-            chunk_count += 1
-            if ctx and chunk_count % 10 == 0:
-                await ctx.debug(f"Generated {chunk_count} chunks...")
+        result = await resume_service.generate_updated_resume(
+            job_description=job_description,
+            top_k=top_k,
+            user_id=user_id,
+            use_cache=use_cache,
+        )
         
-        resume_text = "".join(resume_chunks)
-        
+        resume_text = result.get("resume", "")
         if ctx:
             await ctx.info(f"Resume generation complete ({len(resume_text)} characters)")
         else:
             logger.info("Resume generation complete")
         
-        return resume_text
+        return json.dumps({
+            "status": "success",
+            "resume": resume_text,
+            "match_summary": result.get("match_summary"),
+            "matches": result.get("matches"),
+            "cache_hit": result.get("cache_hit")
+        }, indent=2, default=str)
     
     except Exception as e:
         if ctx:
@@ -562,4 +570,3 @@ if __name__ == "__main__":
     # Run FastMCP server using StreamableHTTP transport
     # The host and port are set during FastMCP initialization above
     mcp.run(transport="streamable-http")
-

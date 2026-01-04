@@ -146,3 +146,6 @@ data: {"jsonrpc": "2.0", "id": 2, "result": {...}}
 - **Cause**: Session ID format is wrong
 - **Fix**: Use the exact session ID from initialize response headers
 
+
+
+

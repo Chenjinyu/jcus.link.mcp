@@ -3,12 +3,19 @@
 Resume Service - High-level business logic for resume operations
 """
 
+from __future__ import annotations
+
 import logging
-from typing import List, AsyncIterator, cast
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any, List, Optional, AsyncIterator, cast
 from collections.abc import AsyncGenerator
 
+from ..config import settings
+from ..core.resume_cache import ResumeCacheEntry, get_resume_cache
 from .llm_service import get_llm_service
 from .vector_service import get_vector_service
+from .profile_service import get_profile_service, ProfileService
 from ..schemas import (
     ResumeMatch,
     JobAnalysis,
@@ -19,137 +26,359 @@ from ..schemas import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class MatchSummary:
+    summary: str
+    match_rate: float
+    match_rate_percent: int
+    matched_skills: list[str]
+    missing_skills: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "summary": self.summary,
+            "match_rate": self.match_rate,
+            "match_rate_percent": self.match_rate_percent,
+            "matched_skills": self.matched_skills,
+            "missing_skills": self.missing_skills,
+        }
+
+
 class ResumeService:
     """Service for resume-related operations"""
-    
-    def __init__(self):
+
+    def __init__(self) -> None:
         self.llm_service = get_llm_service()
         self.vector_service = get_vector_service()
-    
+        self.profile_service: Optional[ProfileService]
+        try:
+            self.profile_service = get_profile_service()
+        except Exception as exc:
+            logger.warning("Profile service unavailable, falling back to vector search: %s", exc)
+            self.profile_service = None
+
+        self.resume_cache = get_resume_cache(
+            max_entries=settings.resume_cache_max_entries,
+            ttl_seconds=settings.resume_cache_ttl_seconds,
+            cache_path=settings.resume_cache_path,
+        )
+
+    def _resolve_user_id(self, user_id: Optional[str]) -> str:
+        resolved = user_id or settings.author_user_id
+        if not resolved:
+            raise ValueError("user_id is required (set author_user_id or pass user_id)")
+        return resolved
+
+    def _map_search_results_to_matches(
+        self,
+        results: list[dict[str, Any]],
+    ) -> list[ResumeMatch]:
+        matches: list[ResumeMatch] = []
+        for result in results:
+            metadata = result.get("metadata") or {}
+            profile_data = metadata.get("profile_data") or {}
+            skills = profile_data.get("skills") or []
+            if isinstance(skills, str):
+                skills = [skills]
+            experience_years = profile_data.get("experience_years") or 0
+            try:
+                experience_years = int(experience_years)
+            except (TypeError, ValueError):
+                experience_years = 0
+            resume_id = (
+                result.get("profile_data_id")
+                or result.get("document_id")
+                or result.get("article_id")
+                or "unknown"
+            )
+            matches.append(
+                ResumeMatch(
+                    resume_id=str(resume_id),
+                    content=result.get("chunk_text") or result.get("content") or "",
+                    skills=skills if isinstance(skills, list) else [],
+                    experience_years=experience_years,
+                    similarity_score=float(result.get("similarity") or 0.0),
+                )
+            )
+        return matches
+
+    async def _search_profile_matches(
+        self,
+        job_description: str,
+        user_id: str,
+        top_k: int,
+    ) -> tuple[list[dict[str, Any]], list[ResumeMatch]]:
+        if self.profile_service is None:
+            return [], []
+        raw_results = await self.profile_service.search_job_matches(
+            job_description=job_description,
+            user_id=user_id,
+            top_k=top_k,
+            threshold=settings.min_similarity_threshold,
+        )
+        matches = self._map_search_results_to_matches(raw_results)
+        return raw_results, matches
+
     async def search_matching_resumes(
         self,
-        request: SearchMatchesRequest
+        request: SearchMatchesRequest,
+        user_id: Optional[str] = None,
     ) -> SearchMatchesResponse:
         """Search for resumes matching the job description"""
-        
-        logger.info(f"Searching for top {request.top_k} matching resumes")
-        
-        # Generate embedding for job description
-        query_embedding = await self.vector_service.embed_text(
-            request.job_description
-        )
-        
-        # Search for similar resumes
-        matches = await self.vector_service.similarity_search(
-            query_embedding,
-            top_k=request.top_k
-        )
-        
-        logger.info(f"Found {len(matches)} matching resumes")
-        
-        return SearchMatchesResponse(
-            matches=matches,
-            total_found=len(matches)
-        )
-    
-    async def analyze_job_description(
-        self,
-        job_description: str
-    ) -> JobAnalysis:
+
+        logger.info("Searching for top %s matching resumes", request.top_k)
+
+        if self.profile_service is not None:
+            resolved_user_id = self._resolve_user_id(user_id)
+            _, matches = await self._search_profile_matches(
+                request.job_description, resolved_user_id, request.top_k
+            )
+        else:
+            query_embedding = await self.vector_service.embed_text(
+                request.job_description
+            )
+            matches = await self.vector_service.similarity_search(
+                query_embedding,
+                top_k=request.top_k,
+            )
+
+        logger.info("Found %s matching resumes", len(matches))
+
+        return SearchMatchesResponse(matches=matches, total_found=len(matches))
+
+    async def analyze_job_description(self, job_description: str) -> JobAnalysis:
         """Analyze job description to extract key information"""
-        
+
         logger.info("Analyzing job description")
-        
-        # Use LLM to analyze the job description
+
         analysis_data = await self.llm_service.analyze_text(job_description)
-        
+
         return JobAnalysis(
             required_skills=analysis_data.get("required_skills", []),
             experience_level=analysis_data.get("experience_level", "Mid"),
             key_responsibilities=analysis_data.get("key_responsibilities", []),
             estimated_match_threshold=analysis_data.get(
                 "estimated_match_threshold",
-                0.7
-            )
+                0.7,
+            ),
         )
-    
+
+    async def summarize_matches(
+        self,
+        job_description: str,
+        matches: list[ResumeMatch],
+    ) -> MatchSummary:
+        analysis = await self.analyze_job_description(job_description)
+        required_skills = {skill.lower() for skill in analysis.required_skills}
+        matched_skill_pool = {skill.lower() for m in matches for skill in m.skills}
+        matched_skills = sorted({skill for skill in required_skills & matched_skill_pool})
+        missing_skills = sorted({skill for skill in required_skills - matched_skill_pool})
+
+        if matches:
+            similarity_avg = sum(m.similarity_score for m in matches) / len(matches)
+        else:
+            similarity_avg = 0.0
+
+        if required_skills:
+            skill_coverage = len(matched_skills) / len(required_skills)
+            match_rate = min(1.0, 0.7 * similarity_avg + 0.3 * skill_coverage)
+        else:
+            match_rate = similarity_avg
+
+        match_rate_percent = int(round(match_rate * 100))
+
+        if not matches:
+            summary = "No strong matches found for this job description."
+        elif required_skills:
+            summary = (
+                f"Match rate {match_rate_percent}% with {len(matched_skills)} of "
+                f"{len(required_skills)} required skills aligned."
+            )
+        else:
+            summary = f"Match rate {match_rate_percent}% based on semantic similarity."
+
+        return MatchSummary(
+            summary=summary,
+            match_rate=match_rate,
+            match_rate_percent=match_rate_percent,
+            matched_skills=matched_skills,
+            missing_skills=missing_skills,
+        )
+
     async def generate_optimized_resume(
         self,
         job_description: str,
         matched_resumes: List[ResumeMatch],
-        stream: bool = True
+        stream: bool = True,
     ) -> AsyncIterator[str]:
         """Generate an optimized resume based on job description and matches"""
-        
-        logger.info(
-            f"Generating resume for {len(matched_resumes)} matched profiles"
-        )
-        
-        # Use LLM to generate resume
-        # generate_resume is an async generator function (uses yield)
-        # When called, it returns an async generator object directly, not a coroutine
-        # We need to cast to help the type checker understand this
+
+        logger.info("Generating resume for %s matched profiles", len(matched_resumes))
+
         resume_generator = cast(
             AsyncGenerator[str, None],
             self.llm_service.generate_resume(
                 job_description,
                 matched_resumes,
-                stream=stream
-            )
+                stream=stream,
+            ),
         )
         async for chunk in resume_generator:
             yield chunk
-        
+
         logger.info("Resume generation complete")
-    
+
+    async def generate_updated_resume(
+        self,
+        job_description: str,
+        top_k: int = 5,
+        user_id: Optional[str] = None,
+        use_cache: bool = True,
+    ) -> dict[str, Any]:
+        resolved_user_id = self._resolve_user_id(user_id)
+
+        raw_matches: list[dict[str, Any]] = []
+        matches: list[ResumeMatch] = []
+        if self.profile_service is not None:
+            raw_matches, matches = await self._search_profile_matches(
+                job_description, resolved_user_id, top_k
+            )
+        else:
+            search_result = await self.search_matching_resumes(
+                SearchMatchesRequest(job_description=job_description, top_k=top_k),
+                user_id=resolved_user_id,
+            )
+            matches = search_result.matches
+
+        match_summary = await self.summarize_matches(job_description, matches)
+
+        if self.profile_service is None:
+            resume_chunks: list[str] = []
+            async for chunk in self.generate_optimized_resume(
+                job_description,
+                matches,
+                stream=False,
+            ):
+                resume_chunks.append(chunk)
+            return {
+                "resume": "".join(resume_chunks),
+                "match_summary": match_summary.to_dict(),
+                "matches": [m.dict() for m in matches],
+                "cache_hit": False,
+            }
+
+        profile_ids = [
+            match.get("profile_data_id")
+            for match in raw_matches
+            if match.get("profile_data_id")
+        ]
+        resume_source = self.profile_service.get_resume_source(
+            user_id=resolved_user_id,
+            profile_ids=profile_ids or None,
+        )
+        profile_fingerprint = self.profile_service.fingerprint_resume_source(resume_source)
+        cache_key = self.resume_cache.build_key(job_description, profile_fingerprint)
+
+        if use_cache:
+            cached_entry = await self.resume_cache.get(cache_key)
+            if cached_entry:
+                cached_summary = cached_entry.metadata.get("match_summary")
+                return {
+                    "resume": cached_entry.resume_text,
+                    "match_summary": cached_summary
+                    or {
+                        "summary": cached_entry.summary,
+                        "match_rate": cached_entry.match_rate,
+                        "match_rate_percent": int(round(cached_entry.match_rate * 100)),
+                    },
+                    "matches": [m.dict() for m in matches],
+                    "cache_hit": True,
+                }
+
+        resume_chunks: list[str] = []
+        # cast is the process of converting generate_resume_from_source to type of AsyncGenerator[str, None]
+        resume_generator = cast( 
+            AsyncGenerator[str, None],
+            self.llm_service.generate_resume_from_source(
+                job_description=job_description,
+                resume_source=resume_source,
+                match_summary=match_summary.to_dict(),
+                stream=False,
+            ),
+        )
+        async for chunk in resume_generator:
+            resume_chunks.append(chunk)
+
+        resume_text = "".join(resume_chunks)
+
+        await self.resume_cache.set(
+            ResumeCacheEntry(
+                key=cache_key,
+                resume_text=resume_text,
+                summary=match_summary.summary,
+                match_rate=match_summary.match_rate,
+                created_at=datetime.utcnow(),
+                expires_at=datetime.utcnow() + timedelta(seconds=settings.resume_cache_ttl_seconds),
+                metadata={
+                    "profile_fingerprint": profile_fingerprint,
+                    "user_id": resolved_user_id,
+                    "match_summary": match_summary.to_dict(),
+                },
+            )
+        )
+
+        return {
+            "resume": resume_text,
+            "match_summary": match_summary.to_dict(),
+            "matches": [m.dict() for m in matches],
+            "cache_hit": False,
+        }
+
     async def process_job_description_workflow(
         self,
         job_description: str,
-        top_k: int = 5
+        top_k: int = 5,
+        user_id: Optional[str] = None,
     ) -> tuple[JobAnalysis, List[ResumeMatch], str]:
         """
         Complete workflow: analyze → search → generate
         Returns: (analysis, matches, generated_resume)
         """
-        
+
         logger.info("Starting complete job description workflow")
-        
-        # Step 1: Analyze job description
+
         analysis = await self.analyze_job_description(job_description)
-        
-        # Step 2: Search for matching resumes
         search_result = await self.search_matching_resumes(
             SearchMatchesRequest(
                 job_description=job_description,
-                top_k=top_k
-            )
+                top_k=top_k,
+            ),
+            user_id=user_id,
         )
-        
-        # Step 3: Generate resume (non-streaming for complete workflow)
+
         resume_chunks = []
         async for chunk in self.generate_optimized_resume(
             job_description,
             search_result.matches,
-            stream=False
+            stream=False,
         ):
             resume_chunks.append(chunk)
-        
+
         generated_resume = "".join(resume_chunks)
-        
+
         logger.info("Complete workflow finished")
-        
+
         return analysis, search_result.matches, generated_resume
 
 
-# Singleton instance
-_resume_service = None
+_resume_service: Optional[ResumeService] = None
 
 
 def get_resume_service() -> ResumeService:
     """Get resume service instance (singleton)"""
     global _resume_service
-    
+
     if _resume_service is None:
         _resume_service = ResumeService()
-    
+
     return _resume_service
