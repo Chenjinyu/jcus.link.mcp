@@ -1661,7 +1661,7 @@ class VectorDatabase:
             return []
         return [item for item in data if isinstance(item, dict)]
 
-    async def search_all_rpc_function(
+    async def search_all_similar_content_rpc_function(
         self,
         query: str,
         user_id: str,
@@ -1671,12 +1671,12 @@ class VectorDatabase:
     ) -> List[dict[str, Any]]:
         """
         Simplified search across all content.
-        Uses the search_all_content SQL function.
+        Uses the search_similar_content SQL function.
         """
         query_embedding = await self.create_embedding(query, model_name)
 
         results = self.supabase.rpc(
-            "search_all_content",
+            "search_similar_content",
             {
                 "query_embedding": query_embedding,
                 "user_id_filter": user_id,

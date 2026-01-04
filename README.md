@@ -11,56 +11,7 @@ A production-ready Model Context Protocol (MCP) server for AI-powered resume mat
 - 🌐 **HTTP/SSE Transport**: RESTful API with streaming support
 - 🎯 **Modular Architecture**: Clean, maintainable, and testable code structure
 
-## Project Structure
-
-```
-mcp-resume-server/
-├── src/
-│   ├── __init__.py
-│   ├── main.py                      # Application entry point
-│   ├── config/
-│   │   ├── __init__.py
-│   │   └── settings.py              # Configuration management
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── mcp_protocol.py          # MCP protocol models
-│   │   └── exceptions.py            # Custom exceptions
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── llm_service.py           # LLM integration (Anthropic/OpenAI)
-│   │   ├── vector_service.py        # Vector database operations
-│   │   └── resume_service.py        # Business logic
-│   ├── handlers/
-│   │   ├── __init__.py
-│   │   ├── mcp_handler.py           # MCP protocol handler
-│   │   └── http_handler.py          # HTTP endpoints handler
-│   ├── tools/
-│   │   ├── __init__.py
-│   │   ├── base.py                  # Base tool class
-│   │   ├── search_tool.py           # Resume search tool
-│   │   ├── analysis_tool.py         # Job analysis tool
-│   │   └── generation_tool.py       # Resume generation tool
-│   └── models/
-│       ├── __init__.py
-│       └── domain_models.py         # Domain data models
-├── tests/                           # Test suite
-├── requirements.txt                 # Python dependencies
-├── .env.example                     # Environment variables template
-└── README.md                        # This file
-```
-
-## Design Principles
-
-### 1. **Separation of Concerns**
-Each module has a single, well-defined responsibility:
-- **Config**: Application settings and environment variables
-- **Core**: Protocol definitions and shared exceptions
-- **Services**: Business logic and external integrations
-- **Handlers**: Request/response processing
-- **Tools**: MCP tool implementations
-- **Models**: Data structures and validation
-
-### 2. **Dependency Injection**
+### 1. **Dependency Injection**
 Services are created via factories and injected where needed:
 ```python
 # Services are singletons accessed via getters
@@ -68,7 +19,7 @@ llm_service = get_llm_service()
 vector_service = get_vector_service()
 ```
 
-### 3. **Abstract Base Classes**
+### 2. **Abstract Base Classes**
 Easy to swap implementations:
 ```python
 class BaseLLMService(ABC):
@@ -78,7 +29,7 @@ class BaseVectorService(ABC):
     # Can use ChromaDB, Pinecone, Weaviate, etc.
 ```
 
-### 4. **Type Safety**
+### 3. **Type Safety**
 Full type hints throughout the codebase using Pydantic models.
 
 ## Installation
@@ -86,13 +37,14 @@ Full type hints throughout the codebase using Pydantic models.
 ### Prerequisites
 - Python 3.11+
 - pip
+- uv
 
-### Setup
+## Setup
 
 1. **Clone the repository**
 ```bash
 git clone <repository-url>
-cd mcp-resume-server
+cd jcus.link.mcp
 ```
 
 2. **Create virtual environment**
@@ -103,7 +55,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 3. **Install dependencies**
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 4. **Configure environment**
@@ -134,6 +86,17 @@ uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ### Production Mode
 ```bash
 uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+### Docker
+
+#### Build Docker Image in Local
+```
+docker build -t jcus-link-mcp .
+```
+### Run Docker Contianer in local
+```
+docker run -p 8000:8000 --env-file .env jcus-link-mcp 
 ```
 
 ## API Usage

@@ -10,6 +10,7 @@ AS LONG AS THE ENV EXISTS IN OS ENV, IT WILL BE USED, AND CANNOT
 OVERWRITE BY THE .ENV FILE.
 """
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 from functools import lru_cache
@@ -41,7 +42,14 @@ class Settings(BaseSettings):
     vector_db_type: str = "supabase"  # supabase, chromadb
     supabase_url: Optional[str] = None
     supabase_key: Optional[str] = None
-    supabase_postgres_url: Optional[str] = None
+    supabase_postgres_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("SUPABASE_POSTGRES_URL", "POSTGRES_URL_NON_POOLING"),
+    )
+    postgres_user: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("SUPABASE_POSTGRES_USER", "POSTGRES_USER"),
+    )
     supabase_collection: str = "resumes"
     
     # Vector Database - Alternative: ChromaDB
@@ -50,9 +58,9 @@ class Settings(BaseSettings):
     chromadb_collection: str = "resumes"
     
     # Embeddings
-    embedding_model: str = "all-MiniLM-L6-v2"
-    embedding_dimension: int = 384
-    vector_search_model_name: str = "nomic-embed-text-768"
+    embedding_model: str = "nomic-embed-text-768"
+    embedding_dimension: int = 768
+    vector_search_model_name: str = "all-MiniLM-L6-v2"
     
     # LLM Service
     llm_provider: str = "anthropic"  # anthropic, openai

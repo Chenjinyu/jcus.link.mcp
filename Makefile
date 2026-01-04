@@ -144,21 +144,18 @@ run-prod: ## Run production server
 	@echo "Starting production server..."
 	@uvicorn src.main:app --host 0.0.0.0 --port 8000 --workers 4
 
-shell: ## Start Python interactive shell with project context
-	@$(PYTHON) -i -c "from src.config import settings; from src.services import get_llm_service, get_vector_service, get_resume_service; from src.tools import get_tool_registry; print('Services loaded. Available: settings, get_llm_service, get_vector_service, get_resume_service, get_tool_registry')"
-
 ##@ Docker
 docker-build: ## Build Docker image
 	@echo "Building Docker image..."
-	@docker build -t mcp-resume-server:latest .
+	@docker build -t jcus-link-mcp:latest .
 
 docker-run: ## Run Docker container
 	@echo "Running Docker container..."
-	@docker run -p 8000:8000 --env-file .env mcp-resume-server:latest
+	@docker run -p 8000:8000 --env-file .env jcus-link-mcp:latest
 
 docker-clean: ## Remove Docker image
 	@echo "Removing Docker image..."
-	@docker rmi mcp-resume-server:latest
+	@docker rmi jcus-link-mcp:latest
 
 ##@ Documentation
 docs-serve: ## Serve documentation locally
@@ -198,14 +195,6 @@ deps-update: ## Update dependencies
 deps-tree: ## Show dependency tree
 	@echo "Dependency tree:"
 	@pipdeptree
-
-lock: ## Generate requirements.txt from current environment
-	@echo "Generating requirements.txt..."
-	@$(PIP) freeze > requirements.txt
-	@echo "✅ requirements.txt updated!"
-
-version: ## Show project version
-	@$(PYTHON) -c "from src import __version__; print(f'MCP Resume Server v{__version__}')"
 
 health: ## Check server health
 	@echo "Checking server health..."

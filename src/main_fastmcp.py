@@ -15,6 +15,7 @@ from datetime import datetime
 
 from fastmcp import FastMCP
 from fastmcp.server import Context
+from fastapi import FastAPI
 
 from .config import settings
 from .services import (
@@ -50,6 +51,18 @@ mcp = FastMCP(
     log_level=settings.log_level,
     debug=settings.debug,
 )
+
+# Expose FastMCP via FastAPI so we can add health checks and other endpoints.
+app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+# Mount MCP on /mcp to preserve the existing endpoint.
+app.mount("/mcp", mcp.http_app(transport="streamable-http"))
 
 # Initialize services (singleton pattern)
 resume_service = get_resume_service()
@@ -152,87 +165,6 @@ async def upload_job_description(
         else:
             logger.error(f"Upload failed: {e}")
         raise FileUploadException(str(e))
-
-
-@mcp.tool()
-async def search_matching_resumes(
-    job_description: str,
-    top_k: int = 5,
-    user_id: Optional[str] = None,
-    include_summary: bool = True,
-    ctx: Optional[Context] = None
-) -> str:
-    """
-    Search for resumes that match a job description using vector similarity.
-    
-    Args:
-        job_description: The job description text to match against
-        top_k: Number of top matches to return (1-20, default: 5)
-        user_id: Supabase user ID (defaults to configured author_user_id)
-        include_summary: Include match summary and match rate
-        ctx: FastMCP context for logging (automatically injected)
-    
-    Returns:
-        JSON string with matching resumes and similarity scores
-    """
-    try:
-        if not job_description.strip():
-            raise ValueError("Job description cannot be empty")
-        
-        if not (1 <= top_k <= 20):
-            raise ValueError("top_k must be between 1 and 20")
-        
-        if ctx:
-            await ctx.info(f"Searching for top {top_k} matching resumes")
-            await ctx.debug(f"Job description length: {len(job_description)} characters")
-        else:
-            logger.info(f"Searching for top {top_k} matching resumes")
-        
-        request = SearchMatchesRequest(
-            job_description=job_description,
-            top_k=top_k
-        )
-        
-        if ctx:
-            await ctx.debug("Searching for matching resume data...")
-        result = await resume_service.search_matching_resumes(
-            request,
-            user_id=user_id
-        )
-
-        match_summary = None
-        if include_summary:
-            match_summary = await resume_service.summarize_matches(
-                job_description,
-                result.matches
-            )
-        
-        # Store matches for later reference
-        job_id = f"search_{datetime.now().isoformat()}"
-        _matched_resumes[job_id] = result.matches
-        
-        if ctx:
-            await ctx.info(f"Found {len(result.matches)} matches")
-        else:
-            logger.info(f"Found {len(result.matches)} matches")
-        
-        return json.dumps({
-            "status": "success",
-            "job_id": job_id,
-            "matches": [match.dict() for match in result.matches],
-            "total_found": result.total_found,
-            "match_summary": match_summary.to_dict() if match_summary else None
-        }, indent=2, default=str)
-    
-    except Exception as e:
-        if ctx:
-            await ctx.error(f"Search failed: {e}")
-        else:
-            logger.error(f"Search failed: {e}")
-        return json.dumps({
-            "status": "error",
-            "message": str(e)
-        })
 
 
 @mcp.tool()
@@ -567,6 +499,5 @@ if __name__ == "__main__":
     logger.info(f"Vector DB: {settings.vector_db_type}")
     logger.info(f"MCP endpoint: http://{settings.host}:{settings.port}/mcp")
     
-    # Run FastMCP server using StreamableHTTP transport
-    # The host and port are set during FastMCP initialization above
-    mcp.run(transport="streamable-http")
+    # Run FastAPI app that mounts FastMCP on /mcp
+    uvicorn.run(app, host=settings.host, port=settings.port, log_level=settings.log_level.lower())
